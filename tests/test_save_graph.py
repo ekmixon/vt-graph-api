@@ -58,7 +58,7 @@ def test_get_link():
   graph_id = "dfadsfasd7fa9ds8f7asd9f87dsfasd6f6s8d76fa6sd87f6adsfsdfasd687"
   test_graph.graph_id = graph_id
   assert (test_graph.get_ui_link() ==
-          "https://www.virustotal.com/graph/%s" % graph_id)
+          f"https://www.virustotal.com/graph/{graph_id}")
 
 
 def test_get_link_error():

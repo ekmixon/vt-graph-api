@@ -666,13 +666,12 @@ def mock_request(url, headers, timeout):
   if node_id not in EXPANSION_NODES:
     pytest.xfail("This call have never been invoked")
 
-  if node_id not in EXPANSION_SIDE_EFFECTS:
-    mock = Mock(status_code=200, json=Mock(return_value={"data": []}))
-  else:
-    mock = Mock(
-        status_code=200,
-        json=Mock(return_value=EXPANSION_SIDE_EFFECTS[node_id][expansion]))
-  return mock
+  return (Mock(status_code=200, json=Mock(return_value={"data": []}))
+          if node_id not in EXPANSION_SIDE_EFFECTS else Mock(
+              status_code=200,
+              json=Mock(
+                  return_value=EXPANSION_SIDE_EFFECTS[node_id][expansion]),
+          ))
 
 
 def test_search_connection_second_level_real_data(mocker):
@@ -756,9 +755,9 @@ def test_search_connection_second_level_real_data(mocker):
       call(intermediate_node, "similar_files", 40),
   ]
   test_graph._get_expansion_nodes.assert_has_calls(calls, any_order=True)
-  total_expansion_calls = 0
-  for node_type in six.itervalues(EXPANSION_NODES):
-    total_expansion_calls += len(vt_graph_api.Node.NODE_EXPANSIONS[node_type])
+  total_expansion_calls = sum(
+      len(vt_graph_api.Node.NODE_EXPANSIONS[node_type])
+      for node_type in six.itervalues(EXPANSION_NODES))
   # all assertions are less than instead of equal because of the difficult of
   # stopping threads when solution is found.
   assert test_graph._get_expansion_nodes.call_count <= total_expansion_calls

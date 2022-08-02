@@ -1,6 +1,7 @@
 """Basic VTGraph usage example."""
 
 
+
 from vt_graph_api import VTGraph
 
 
@@ -22,7 +23,7 @@ graph.expand_n_level(level=1, max_nodes_per_relationship=5, max_nodes=100)
 graph.save_graph()
 
 # Get the graph id
-print("Graph Id: %s" % graph.graph_id)
+print(f"Graph Id: {graph.graph_id}")
 
 # Visualizing the Graph
 print(graph.get_ui_link())  # Open the url in the browser

@@ -1,6 +1,7 @@
 """Advanced VTGraph usage example."""
 
 
+
 from vt_graph_api import VTGraph
 from vt_graph_api.errors import NodeNotFoundError
 
@@ -63,4 +64,4 @@ for node in nodes_to_delete:
 
 graph.save_graph()
 
-print("Graph ID: %s" % graph.graph_id)
+print(f"Graph ID: {graph.graph_id}")

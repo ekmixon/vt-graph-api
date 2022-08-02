@@ -254,10 +254,7 @@ class VTGraph(object):
 
   def _get_api_endpoint(self, node_type):
     """Returns the api end point."""
-    if node_type == "ip_address":
-      return "ip_addresses"
-    else:
-      return node_type + "s"
+    return "ip_addresses" if node_type == "ip_address" else f"{node_type}s"
 
   def _add_node_to_output(self, output, node_id):
     """Add the node with the given node_id to the output.
@@ -456,18 +453,8 @@ class VTGraph(object):
     Raises:
       CollaboratorNotFoundError: if any of the collaborators does not exist.
     """
-    data = []
-    for editor in self.user_viewers:
-      data.append({
-          "id": editor,
-          "type": "user"
-      })
-    for editor in self.group_viewers:
-      data.append({
-          "id": editor,
-          "type": "group"
-      })
-
+    data = [{"id": editor, "type": "user"} for editor in self.user_viewers]
+    data.extend({"id": editor, "type": "group"} for editor in self.group_viewers)
     if not data:
       return
 
@@ -524,18 +511,8 @@ class VTGraph(object):
     Raises:
       CollaboratorNotFoundError: if any of the collaborators does not exist.
     """
-    data = []
-    for editor in self.user_editors:
-      data.append({
-          "id": editor,
-          "type": "user"
-      })
-    for editor in self.group_editors:
-      data.append({
-          "id": editor,
-          "type": "group"
-      })
-
+    data = [{"id": editor, "type": "user"} for editor in self.user_editors]
+    data.extend({"id": editor, "type": "group"} for editor in self.group_editors)
     if not data:
       return
 
@@ -632,12 +609,11 @@ class VTGraph(object):
             .intersection(set(node_.children)))
         # Two nodes could be minimized if they have the same children in the
         # same expansion and they have at least one child.
-        for expansion in shared_expansions:
-          if (node.children[expansion] and
-              collections.Counter(node.children[expansion]) ==
-              collections.Counter(node_.children[expansion])):
-            to_minimize.append((node_, expansion))
-
+        to_minimize.extend(
+            (node_, expansion) for expansion in shared_expansions
+            if (node.children[expansion]
+                and collections.Counter(node.children[expansion]) ==
+                collections.Counter(node_.children[expansion])))
       # Once the possible minimizations are computed, it is time to
       # generate the relationship id and set it to the minimized nodes.
       for node_to_minimize, expansion in to_minimize:
@@ -884,7 +860,7 @@ class VTGraph(object):
     # Add cursor data.
     has_more = data.get("meta", {})
     # Some results return just one element back.
-    new_nodes = data.get("data", list())
+    new_nodes = data.get("data", [])
     if isinstance(new_nodes, dict):
       new_nodes = [new_nodes]
     elif new_nodes is None:
@@ -897,17 +873,13 @@ class VTGraph(object):
       # Translation for resolutions.
       if child_node_type == "resolution":
         child_node_id = child_node_id.replace(parent_node_id, "")
-        if parent_node_type == "domain":
-          child_node_type = "ip_address"
-        else:
-          child_node_type = "domain"
+        child_node_type = "ip_address" if parent_node_type == "domain" else "domain"
       new_node = vt_graph_api.node.Node(child_node_id, child_node_type)
       if "attributes" in node_data:
         new_node.add_attributes(node_data["attributes"])
       expansion_nodes.append(new_node)
 
-    cursor = has_more.get("cursor")
-    if cursor:
+    if cursor := has_more.get("cursor"):
       next_max = max_nodes_per_relationship - len(new_nodes)
       if next_max > 0:
         return self._get_expansion_nodes(
@@ -952,7 +924,7 @@ class VTGraph(object):
     expansions = node.expansions_available
 
     with concurrent.futures.ThreadPoolExecutor(
-        max_workers=len(expansions)) as pool:
+          max_workers=len(expansions)) as pool:
 
       has_quota = False
 
@@ -968,14 +940,13 @@ class VTGraph(object):
             has_quota = True
           max_api_quotas.append(quotas_left)
 
-        if has_quota:
-          futures.append((
-              pool.submit(self._get_expansion_nodes, node, expansion, 40),
-              expansion))
-          has_quota = False
-        else:
+        if not has_quota:
           break
 
+        futures.append((
+            pool.submit(self._get_expansion_nodes, node, expansion, 40),
+            expansion))
+        has_quota = False
       for future, expansion in futures:
 
         nodes, _ = future.result()
@@ -1058,12 +1029,13 @@ class VTGraph(object):
     while has_quota and target_nodes and queue:
       with concurrent.futures.ThreadPoolExecutor(max_workers=max_qps) as pool:
         visited_nodes.extend(six.iterkeys(queue))
-        futures = []
-        for node, params in six.iteritems(queue):
-          futures.append(pool.submit(expand_parallel_partial_, node, params))
+        futures = [
+            pool.submit(expand_parallel_partial_, node, params)
+            for node, params in six.iteritems(queue)
+        ]
         queue.clear()
         for future in futures:
-          queue.update(future.result())
+          queue |= future.result()
       with lock:
         quotas_left = max_api_quotas.pop()
         has_quota = quotas_left > 0
@@ -1097,20 +1069,13 @@ class VTGraph(object):
     This call consumes API quota (as much as max_api_quotas value), one for
     each expansion required to find the relationship.
     """
-    has_link = False
-    for source_, target_, _ in self.links:
-      if (source_ == source_node.node_id and
-          self.nodes[target_] in target_nodes or
-          self.nodes[source_] in target_nodes and
-          target_ == source_node.node_id):
-        has_link = True
-        break  # Exit if found
-
-    if not has_link:
-      links = self._search_connection(
-          source_node, target_nodes, max_api_quotas, max_depth, max_qps)
-
-      if links:
+    has_link = any((
+        source_ == source_node.node_id and self.nodes[target_] in target_nodes or
+        self.nodes[source_] in target_nodes and target_ == source_node.node_id)
+                   for source_, target_, _ in self.links)
+    if links := self._search_connection(source_node, target_nodes,
+                                        max_api_quotas, max_depth, max_qps):
+      if not has_link:
         for links_ in links:
           for source_id, target_id, connection_type, target_type in links_:
             self.add_node(target_id, target_type, fetch_info_collected_nodes)
@@ -1148,7 +1113,7 @@ class VTGraph(object):
     in SHA1 or MD5, URL instead of an VT URL identifier or if the given node_id
     belongs to an unknown identifier.
     """
-    if node_type == "file" or node_type == "url":
+    if node_type in ["file", "url"]:
       node_id = self._get_node_id(node_id, fetch_vt_enterprise)
 
     # Make this function thread safe.
@@ -1191,15 +1156,20 @@ class VTGraph(object):
     futures = []
     added_nodes = []
     with concurrent.futures.ThreadPoolExecutor(
-        max_workers=len(node_list)) as pool:
-      for node_data in node_list:
-        futures.append(pool.submit(
-            self.add_node, node_data.get("node_id"), node_data.get("node_type"),
-            fetch_information, fetch_vt_enterprise, node_data.get("label", ""),
-            node_data.get("attributes"), node_data.get("x_position", 0),
-            node_data.get("y_position", 0)))
-      for future in futures:
-        added_nodes.append(future.result())
+          max_workers=len(node_list)) as pool:
+      futures.extend(
+          pool.submit(
+              self.add_node,
+              node_data.get("node_id"),
+              node_data.get("node_type"),
+              fetch_information,
+              fetch_vt_enterprise,
+              node_data.get("label", ""),
+              node_data.get("attributes"),
+              node_data.get("x_position", 0),
+              node_data.get("y_position", 0),
+          ) for node_data in node_list)
+      added_nodes.extend(future.result() for future in futures)
       return added_nodes
 
   def has_node(self, node_id):
@@ -1532,10 +1502,11 @@ class VTGraph(object):
     expansion_nodes = []
     expansions_available = self.nodes[node_id].expansions_available
     with concurrent.futures.ThreadPoolExecutor(
-        max_workers=len(expansions_available)) as pool:
-      for expansion in expansions_available:
-        futures.append(pool.submit(
-            self.expand, node_id, expansion, max_nodes_per_relationship))
+          max_workers=len(expansions_available)) as pool:
+      futures.extend(
+          pool.submit(self.expand, node_id, expansion,
+                      max_nodes_per_relationship)
+          for expansion in expansions_available)
       for future in futures:
         expansion_nodes.extend(future.result())
 
@@ -1567,7 +1538,7 @@ class VTGraph(object):
 
     This call consumes API quota, one for each node expansion.
     """
-    pending = {node_id for node_id in six.iterkeys(self.nodes)}
+    pending = set(six.iterkeys(self.nodes))
     visited = set()
     expansion_nodes = []
     for _ in range(level):
@@ -1727,15 +1698,14 @@ class VTGraph(object):
         headers=self._get_headers(),
         stream=True)
 
-    if r.status_code == 200:
-      r.raw.decode_content = True
-      filename = "{graph_id}.jpg".format(graph_id=self.graph_id)
-      file_path = os.path.join(path, filename)
-      with open(file_path,'wb') as f:
-        shutil.copyfileobj(r.raw, f)
-    else:
+    if r.status_code != 200:
       raise vt_graph_api.errors.DownloadScreenshotError(
           "Couldn't download screenshot for graph {graph_id}".format(
               graph_id=self.graph_id
           )
       )
+    r.raw.decode_content = True
+    filename = "{graph_id}.jpg".format(graph_id=self.graph_id)
+    file_path = os.path.join(path, filename)
+    with open(file_path,'wb') as f:
+      shutil.copyfileobj(r.raw, f)

@@ -111,9 +111,8 @@ class Node(object):
     """
     if "has_detections" in self.attributes:
       return self.attributes["has_detections"]
-    else:
-      stats = self.attributes.get("last_analysis_stats", {})
-      return stats.get("malicious", 0) + stats.get("suspicious", 0)
+    stats = self.attributes.get("last_analysis_stats", {})
+    return stats.get("malicious", 0) + stats.get("suspicious", 0)
 
   @staticmethod
   def is_url(node_id):
@@ -231,7 +230,7 @@ class Node(object):
     self.relationship_ids.clear()
 
   def __str__(self):
-    return "%s" % (self.node_id)
+    return f"{self.node_id}"
 
   def __repr__(self):
     return str(self)

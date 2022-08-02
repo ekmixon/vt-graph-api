@@ -145,9 +145,7 @@ def test_not_supported_expansion(mocker):
   test_graph.add_node(added_node_id, "file",
                       label="Investigation node")
   expansion = "dummy expansion"
-  with pytest.raises(vt_graph_api.errors.NodeNotSupportedExpansionError,
-                     match=r"Node %s cannot be expanded with %s expansion." %
-                     (added_node_id, expansion)):
+  with pytest.raises(vt_graph_api.errors.NodeNotSupportedExpansionError, match=f"Node {added_node_id} cannot be expanded with {expansion} expansion."):
     test_graph.expand(added_node_id, expansion, 40)
   mocker.resetall()
 
@@ -203,5 +201,5 @@ def test_expand_node_that_returns_itself_in_the_expansion(mocker):
   mocker.patch("requests.get", return_value=m)
   test_graph.add_node(rq_id, "file", label="Investigation Node File")
   test_graph.expand(rq_id, "similar_files")
-  assert not (rq_id, rq_id, "similar_files") in test_graph.links
+  assert (rq_id, rq_id, "similar_files") not in test_graph.links
   mocker.resetall()

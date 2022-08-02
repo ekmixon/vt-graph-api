@@ -1,5 +1,6 @@
 """VTGraph basic search usage example."""
 
+
 from vt_graph_api import VTGraph
 
 
@@ -21,7 +22,7 @@ graph.add_links_if_match(
 graph.save_graph()
 
 # Get the graph id
-print("Graph Id: %s" % graph.graph_id)
+print(f"Graph Id: {graph.graph_id}")
 
 # Visualizing the Graph
 print(graph.get_ui_link())  # Open the url in the browser
